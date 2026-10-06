@@ -1,0 +1,1034 @@
+<title>Drone Machine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Martian+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: one-screen instrument — header, page area, tab bar. Wide screens keep PLAY open beside the other pages. */
+:root {
+  color-scheme: dark;
+  --ink: #0c0f17;          /* ground */
+  --panel: #171c29;        /* slider tracks, buttons */
+  --panel-hi: #232a3c;
+  --line: #2e3650;
+  --fg: #e4e7f0;
+  --dim: #8189a3;
+  --white: #f3f4fb;
+  --red: #ec5466;
+  --sub: #8a7cf4;
+  --pad: #2ec4b6;
+  --glass: #8ecae6;
+  --saw: #f4a261;
+  --lfo: #e8e46a;
+  --texture: #e76f8a;
+  --fx: #aab4d4;
+  --font-display: "Unbounded", "Arial Black", system-ui, sans-serif;
+  --font-ui: "Martian Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --gap: 8px;
+  --radius: 10px;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  background: var(--ink);
+  color: var(--fg);
+  font: 500 12px/1.3 var(--font-ui);
+  overflow: hidden;
+  -webkit-user-select: none; user-select: none;
+  touch-action: none;
+}
+button { font: inherit; color: inherit; }
+button:focus-visible, .slider:focus-visible { outline: 2px solid var(--white); outline-offset: 2px; }
+
+.app {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: var(--gap);
+  padding-block: 10px;
+  padding-inline: 16px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* header */
+header { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.brand { font: 700 15px/1 var(--font-display); letter-spacing: .02em; white-space: nowrap; }
+.brand small { display: block; font: 400 10px/1.4 var(--font-ui); color: var(--dim); letter-spacing: .04em; margin-top: 4px; }
+.status { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.chip { padding: 5px 9px; border-radius: 999px; background: var(--panel); color: var(--dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.chip b { color: var(--fg); font-weight: 600; }
+.chip.on { background: var(--white); color: var(--ink); }
+.power {
+  border: 0; border-radius: 999px; padding: 9px 16px; cursor: pointer;
+  background: var(--white); color: var(--ink); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; font-size: 11px;
+}
+.power[aria-pressed="true"] { background: var(--panel-hi); color: var(--fg); }
+
+/* page area */
+main { min-height: 0; display: grid; gap: calc(var(--gap) * 2); }
+.page { min-height: 0; min-width: 0; }
+.wide main { grid-template-columns: 1.35fr 1fr; }
+
+/* tabs */
+nav { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--gap); }
+.wide nav { grid-template-columns: repeat(4, 1fr); margin-left: calc((100% + var(--gap) * 2) * 1.35 / 2.35); }
+.wide nav [data-page="play"] { display: none; }
+.tab {
+  border: 1px solid var(--line); background: transparent; border-radius: var(--radius);
+  padding: 11px 4px; cursor: pointer; letter-spacing: .14em; font-weight: 600; font-size: 11px;
+}
+.tab[aria-selected="true"] { background: var(--white); color: var(--ink); border-color: var(--white); }
+
+/* generic buttons */
+.btn {
+  border: 1.5px solid color-mix(in srgb, var(--c, var(--fx)) 55%, transparent);
+  background: var(--panel); border-radius: var(--radius); cursor: pointer;
+  font-weight: 600; letter-spacing: .1em; text-transform: uppercase; font-size: 11px; padding: 8px 4px;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.btn.lit { background: var(--c, var(--fx)); color: var(--ink); border-color: var(--c, var(--fx)); }
+.btn small { display: block; font-size: 9px; font-weight: 400; letter-spacing: .04em; text-transform: none; opacity: .75; margin-top: 3px; }
+
+/* sliders */
+.slider {
+  position: relative; background: var(--panel); border-radius: var(--radius); overflow: hidden;
+  cursor: pointer; touch-action: none; min-height: 34px; min-width: 0;
+}
+.slider .fill { position: absolute; left: 0; bottom: 0; background: color-mix(in srgb, var(--c, var(--fx)) 52%, var(--panel)); }
+.slider .ghost { position: absolute; background: var(--white); opacity: .9; }
+.slider .lab, .slider .num { position: absolute; top: 50%; transform: translateY(-50%); pointer-events: none; }
+.slider .lab { left: 12px; letter-spacing: .06em; }
+.slider .num { right: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.slider.h .fill { top: 0; height: 100%; }
+.slider.h .ghost { top: 5px; bottom: 5px; width: 2px; margin-left: -1px; }
+.slider.v .fill { width: 100%; }
+.slider.v .ghost { left: 5px; right: 5px; height: 2px; margin-bottom: -1px; }
+.slider.v .num { top: auto; bottom: 8px; left: 0; right: 0; text-align: center; transform: none; }
+
+/* PLAY */
+#page-play { display: grid; grid-template-columns: 1fr minmax(96px, 22%); grid-template-rows: 1fr auto; gap: var(--gap); }
+.xy { position: relative; background: #111522; border-radius: var(--radius); overflow: hidden; touch-action: none; cursor: crosshair; min-height: 0; }
+.xy canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.xy .axis { position: absolute; color: var(--dim); font-size: 10px; letter-spacing: .08em; pointer-events: none; }
+.xy .axis.x { right: 10px; bottom: 8px; }
+.xy .axis.y { left: 10px; top: 8px; }
+.cover {
+  position: absolute; inset: 0; display: grid; place-content: center; gap: 12px; text-align: center;
+  background: color-mix(in srgb, var(--ink) 55%, transparent);
+}
+.cover p { margin: 0; color: var(--dim); max-width: 32ch; line-height: 1.6; }
+.cover .power { justify-self: center; padding: 14px 26px; font-size: 13px; }
+.keys { grid-column: 1; display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; height: 46px; }
+.key { border: 0; border-radius: 6px; background: #c9cdda; color: var(--ink); cursor: pointer; font-size: 10px; font-weight: 600; padding: 0; min-width: 0; }
+.key.sharp { background: #3a4158; color: var(--fg); }
+.key.lit { background: var(--white); box-shadow: inset 0 -4px 0 var(--pad); }
+.actions { grid-row: 1 / span 2; grid-column: 2; display: grid; grid-auto-rows: 1fr; gap: var(--gap); }
+
+/* MIX */
+#page-mix { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--gap); }
+.strip { display: grid; grid-template-rows: auto 1fr auto; gap: var(--gap); min-width: 0; min-height: 0; }
+.strip .body { display: grid; grid-template-columns: 1fr 8px; gap: 5px; min-height: 0; }
+.meter { background: var(--panel); border-radius: 4px; position: relative; overflow: hidden; }
+.meter i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--c); border-radius: 4px; }
+.strip .name { padding-block: 12px; }
+
+/* LAYER + FX */
+#page-layer { display: grid; grid-template-rows: auto 1fr; gap: var(--gap); }
+.chips { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--gap); }
+.chips .btn { padding-block: 11px; }
+.rows { display: grid; grid-auto-rows: 1fr; gap: var(--gap); min-height: 0; }
+.blurb { color: var(--dim); font-size: 10.5px; line-height: 1.5; margin: 0; padding: 0 2px; }
+#page-fx { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
+
+/* LFO */
+#page-lfo { display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--gap) * 2); }
+.lfo { display: grid; grid-template-rows: auto minmax(44px, 1fr) auto 1fr 1fr; gap: var(--gap); min-width: 0; min-height: 0; }
+.lfo-head { display: flex; align-items: center; gap: var(--gap); min-width: 0; }
+.lfo-name { font: 700 12px/1 var(--font-display); color: var(--lfo); white-space: nowrap; }
+.lfo select {
+  flex: 1; min-width: 0; font: inherit; color: var(--fg); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; cursor: pointer;
+}
+.scope { width: 100%; height: 100%; background: #111522; border-radius: var(--radius); display: block; min-height: 0; }
+.shapes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.shapes .btn { padding: 7px 2px; font-size: 10px; letter-spacing: .06em; }
+
+.hint { color: var(--dim); font-size: 10px; text-align: center; letter-spacing: .03em; }
+.wide .hint { text-align: left; }
+
+/* phones */
+@media (max-width: 640px) {
+  .brand small { display: none; }
+  .chip.opt { display: none; }
+  #page-play { grid-template-columns: 1fr; grid-template-rows: 1fr auto auto; }
+  .actions { grid-row: auto; grid-column: 1; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 48px; }
+  .keys { height: 42px; }
+  .key { font-size: 8.5px; }
+  #page-mix { gap: 5px; }
+  .strip .name { font-size: 9px; letter-spacing: .02em; }
+  #page-fx { grid-template-columns: 1fr; grid-auto-rows: 1fr; }
+  #page-lfo { grid-template-columns: 1fr; gap: var(--gap); }
+  .shapes { grid-template-columns: repeat(6, 1fr); }
+  .tab { letter-spacing: .06em; font-size: 10px; }
+  .slider { min-height: 30px; }
+  .chips { grid-template-columns: repeat(3, 1fr); }
+  .hint { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="app" id="app">
+  <header>
+    <div class="brand">Drone Machine<small>5 layers · generative · touch to play</small></div>
+    <div class="status">
+      <span class="chip"><b id="st-root">D2</b> <span id="st-scale">minor</span></span>
+      <span class="chip opt" id="st-hold">hold</span>
+      <span class="chip opt" id="st-freeze">freeze</span>
+      <button class="power" id="power" aria-pressed="false">Start</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="page" id="page-play" aria-label="Play">
+      <div class="xy" id="xy">
+        <canvas id="viz"></canvas>
+        <span class="axis y">y: feedback</span>
+        <span class="axis x">x: filter</span>
+        <div class="cover" id="cover">
+          <button class="power" id="power2">Start the drone</button>
+          <p>Sound fades in over about ten seconds. Drag here to sweep the filter and delay feedback.</p>
+        </div>
+      </div>
+      <div class="keys" id="keys" aria-label="Root note"></div>
+      <div class="actions" id="actions"></div>
+    </section>
+
+    <section class="page" id="page-mix" aria-label="Mix"></section>
+
+    <section class="page" id="page-layer" aria-label="Layer">
+      <div class="chips" id="chips"></div>
+      <div class="rows" id="layer-rows"></div>
+    </section>
+
+    <section class="page" id="page-fx" aria-label="Effects"></section>
+
+    <section class="page" id="page-lfo" aria-label="LFOs"></section>
+  </main>
+
+  <nav role="tablist" id="tabs">
+    <button class="tab" role="tab" data-page="mix">MIX</button>
+    <button class="tab" role="tab" data-page="layer">LAYER</button>
+    <button class="tab" role="tab" data-page="fx">FX</button>
+    <button class="tab" role="tab" data-page="lfo">LFO</button>
+    <button class="tab" role="tab" data-page="play">PLAY</button>
+  </nav>
+  <div class="hint">space: hold to freeze · M: mutate · H: hold · ← →: move root</div>
+</div>
+
+<script>
+"use strict";
+// ------------------------------------------------------------------ model
+
+const LAYERS = [
+  { name: "sub", blurb: "Deep sine on the root and fifth. Moves very rarely." },
+  { name: "pad", blurb: "Three drifting oscillators per voice, from sine (dark) to saw (bright)." },
+  { name: "glass", blurb: "High FM shimmer. Notes swell in and fade away." },
+  { name: "saw", blurb: "Raw sawtooth voices: a detuned pair spread left and right, plus one an octave down, through a resonant filter. Tone opens the filter." },
+  { name: "texture", blurb: "White noise through a filter (tone sets brightness), with tuned crackle (density). Rate sets how fast the filter drifts." },
+];
+const LAYER_PARAMS = ["level", "density", "rate", "tone", "space"];
+const FX_PARAMS = ["drive", "delay", "crush", "time", "filter", "feedback", "drift", "reverb", "weather", "size", "volume"];
+const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const SCALES = [
+  ["minor", [0, 2, 3, 5, 7, 8, 10]],
+  ["dorian", [0, 2, 3, 5, 7, 9, 10]],
+  ["lydian", [0, 2, 4, 6, 7, 9, 11]],
+  ["pentatonic", [0, 3, 5, 7, 10]],
+  ["fifths", [0, 7]],
+  ["phrygian", [0, 1, 3, 5, 7, 8, 10]],
+];
+// How each layer picks notes. Weights are for [root, fifth, any scale note].
+const CONF = {
+  sub: { amp: 0.24, minV: 1, maxV: 2, octave: -1, octaves: 1, weights: [0.7, 0.3, 0], lowest: 28 },
+  pad: { amp: 0.34, minV: 1, maxV: 6, octave: 0, octaves: 3, weights: [0.35, 0.25, 0.4] },
+  glass: { amp: 0.24, minV: 0, maxV: 4, octave: 2, octaves: 2, weights: [0.2, 0.2, 0.6] },
+  saw: { amp: 0.55, minV: 1, maxV: 4, octave: 0, octaves: 2, weights: [0.4, 0.3, 0.3] },
+};
+
+const p = {
+  volume: 0.7, weather: 0.4, drift: 0.3,
+  drive: 0.1, crush: 0, filter: 1, delay: 0.35, time: 0.5, feedback: 0.5, reverb: 0.6, size: 0.85,
+};
+const DEFAULTS = {
+  sub: [0.6, 0.5, 0.2, 0.3, 0.15],
+  pad: [0.7, 0.5, 0.3, 0.4, 0.5],
+  glass: [0.5, 0.4, 0.3, 0.4, 0.8],
+  saw: [0.5, 0.35, 0.3, 0.45, 0.6],
+  texture: [0.35, 0.3, 0.4, 0.4, 0.5],
+};
+p.lfo1_rate = 0.25; p.lfo1_depth = 0.6;      // LFO rates map to 0.02..20 Hz
+p.lfo2_rate = 0.55; p.lfo2_depth = 0.3;
+for (const [name, vals] of Object.entries(DEFAULTS)) LAYER_PARAMS.forEach((k, i) => (p[`${name}_${k}`] = vals[i]));
+
+const mod = {};                                   // weather offsets, -1..1
+const lfoOff = {};                                // LFO offsets, summed per destination
+const val = (k) => Math.min(1, Math.max(0, p[k] + (mod[k] || 0) * p.weather * 0.5 + (lfoOff[k] || 0)));
+const lv = (name, k) => val(`${name}_${k}`);
+
+const state = { root: 38, scale: 0, hold: false, freeze: false, muted: {}, running: false, page: "play", layer: "pad" };
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const mtof = (m) => 440 * 2 ** ((m - 69) / 12);
+const noteName = (n) => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 1);
+const expmap = (v, lo, hi) => lo * (hi / lo) ** v;
+
+function pickNote(name) {
+  const c = CONF[name];
+  const scale = SCALES[state.scale][1];
+  const fifth = scale.includes(7) ? 7 : pick(scale);
+  const r = Math.random() * c.weights.reduce((a, b) => a + b, 0);
+  const interval = r < c.weights[0] ? 0 : r < c.weights[0] + c.weights[1] ? fifth : pick(scale);
+  let note = state.root + interval + 12 * (c.octave + Math.floor(Math.random() * c.octaves));
+  while (note < (c.lowest || 0)) note += 12;
+  return note;
+}
+
+// ------------------------------------------------------------------ audio engine
+
+let ctx, A;                                       // AudioContext and the node graph
+const layers = {};                                // per-layer bus, strip, voices
+
+function tanhCurve(gain, n = 1024) {
+  const c = new Float32Array(n);
+  const norm = gain ** 0.3;
+  for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; c[i] = Math.tanh(x * gain) / norm; }
+  return c;
+}
+function crushCurve(bits, n = 4096) {
+  const steps = 2 ** bits, c = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; c[i] = Math.round(x * steps) / steps; }
+  return c;
+}
+function reverbIR(seconds) {
+  const len = Math.floor(ctx.sampleRate * seconds), buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 2.6;
+  }
+  return buf;
+}
+function whiteNoise(seconds) {
+  const len = Math.floor(ctx.sampleRate * seconds), buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) { const d = buf.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1; }
+  return buf;
+}
+function pinkNoise(seconds) {
+  const len = Math.floor(ctx.sampleRate * seconds), buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+    for (let i = 0; i < len; i++) {
+      const w = Math.random() * 2 - 1;
+      b0 = 0.99886 * b0 + w * 0.0555179; b1 = 0.99332 * b1 + w * 0.0750759; b2 = 0.969 * b2 + w * 0.153852;
+      b3 = 0.8665 * b3 + w * 0.3104856; b4 = 0.55 * b4 + w * 0.5329522; b5 = -0.7616 * b5 - w * 0.016898;
+      d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11; b6 = w * 0.115926;
+    }
+  }
+  return buf;
+}
+const now = () => ctx.currentTime;
+let FAST = false;                                 // set while an LFO drives a parameter: follow it closely
+const glide = (param, v, tc = 0.08) => param.setTargetAtTime(v, now(), FAST ? Math.min(tc, 0.015) : tc);
+
+function buildEngine() {
+  ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: "playback" });
+  const g = (v = 1) => { const n = ctx.createGain(); n.gain.value = v; return n; };
+  A = {};
+  A.dry = g(); A.send = g();
+
+  // Ping-pong delay with freeze: input is cut and the loop runs at full feedback.
+  A.delayIn = g(); A.delayIn.channelCount = 1; A.delayIn.channelCountMode = "explicit";
+  A.dL = ctx.createDelay(3); A.dR = ctx.createDelay(3);
+  A.lpL = ctx.createBiquadFilter(); A.lpR = ctx.createBiquadFilter();
+  A.lpL.frequency.value = A.lpR.frequency.value = 3000;
+  A.satL = ctx.createWaveShaper(); A.satR = ctx.createWaveShaper(); A.satL.curve = A.satR.curve = tanhCurve(1);
+  A.fbL = g(0.5); A.fbR = g(0.5);
+  A.send.connect(A.delayIn); A.delayIn.connect(A.dL);
+  A.dL.connect(A.lpL); A.lpL.connect(A.satL); A.satL.connect(A.fbL); A.fbL.connect(A.dR);
+  A.dR.connect(A.lpR); A.lpR.connect(A.satR); A.satR.connect(A.fbR); A.fbR.connect(A.dL);
+  A.merge = ctx.createChannelMerger(2); A.dL.connect(A.merge, 0, 0); A.dR.connect(A.merge, 0, 1);
+  A.delayMix = g(0.3);
+  A.merge.connect(A.delayMix);
+
+  // Reverb on (send + delay), crossfaded with its own input.
+  A.wet = g(); A.send.connect(A.wet); A.delayMix.connect(A.wet);
+  A.verb = ctx.createConvolver(); A.verb.buffer = reverbIR(5);
+  A.verbWet = g(0.6); A.verbDry = g(0.4);
+  A.wet.connect(A.verb); A.verb.connect(A.verbWet); A.wet.connect(A.verbDry);
+
+  // Everything -> drive -> crush (crossfaded) -> filter -> limiter -> volume.
+  A.mix = g(); A.dry.connect(A.mix); A.verbWet.connect(A.mix); A.verbDry.connect(A.mix);
+  A.drive = ctx.createWaveShaper(); A.drive.curve = tanhCurve(1); A.drive.oversample = "2x";
+  A.mix.connect(A.drive);
+  A.crush = ctx.createWaveShaper(); A.crushWet = g(0); A.crushDry = g(1);
+  A.drive.connect(A.crush); A.crush.connect(A.crushWet); A.drive.connect(A.crushDry);
+  A.filter = ctx.createBiquadFilter(); A.filter.type = "lowpass"; A.filter.Q.value = 1.1;
+  A.crushWet.connect(A.filter); A.crushDry.connect(A.filter);
+  A.limit = ctx.createDynamicsCompressor();
+  A.limit.threshold.value = -8; A.limit.knee.value = 4; A.limit.ratio.value = 20; A.limit.attack.value = 0.003; A.limit.release.value = 0.25;
+  A.out = g(0.5);
+  A.filter.connect(A.limit); A.limit.connect(A.out); A.out.connect(ctx.destination);
+
+  // Per-layer channel strips.
+  LAYERS.forEach(({ name }) => {
+    const bus = g(), level = g(), mute = g(state.muted[name] ? 0 : 1), dry = g(), send = g();
+    const meter = ctx.createAnalyser(); meter.fftSize = 512;
+    bus.connect(level); level.connect(mute); mute.connect(dry); mute.connect(send); mute.connect(meter);
+    dry.connect(A.dry); send.connect(A.send);
+    const pitch = ctx.createConstantSource(); pitch.offset.value = 0; pitch.start();   // LFO pitch, in cents
+    layers[name] = { bus, level, mute, dry, send, meter, pitch, voices: [], buf: new Float32Array(512), rms: 0 };
+  });
+
+  buildTexture();
+  for (const k of Object.keys(p)) apply(k);
+}
+
+// ---- voices: each returns { pitch, retune(note), tone(v), wander(), release() }
+
+function envelope(out, amp, attack) {
+  out.gain.setValueAtTime(0, now());
+  out.gain.setTargetAtTime(amp, now(), attack / 3);
+}
+function bindPitch(name, oscs) { oscs.forEach((o) => layers[name].pitch.connect(o.detune)); }
+function stopLater(nodes, out, release, name) {
+  out.gain.cancelScheduledValues(now());
+  out.gain.setTargetAtTime(0, now(), release / 4);
+  setTimeout(() => {
+    nodes.forEach((n) => { try { n.stop(); } catch (e) {} try { layers[name].pitch.disconnect(n.detune); } catch (e) {} });
+    out.disconnect();
+  }, release * 1000 + 200);
+}
+
+function subVoice(note) {
+  const L = layers.sub, out = ctx.createGain(), sh = ctx.createWaveShaper(), breath = ctx.createGain();
+  const sine = ctx.createOscillator(), tri = ctx.createOscillator(), triGain = ctx.createGain();
+  tri.type = "triangle";
+  sine.connect(sh); tri.connect(triGain); triGain.connect(sh); sh.connect(breath); breath.connect(out); out.connect(L.bus);
+  const v = {
+    pitch: note,
+    retune(n) { v.pitch = n; glide(sine.frequency, mtof(n), 2); glide(tri.frequency, mtof(n) * 2, 2); },
+    tone(t) { glide(triGain.gain, t * 0.25, 0.4); sh.curve = tanhCurve(1 + t * 3); },
+    wander() { glide(breath.gain, rand(0.7, 1), 3); glide(sine.detune, rand(-5, 5), 4); },
+    release() { stopLater([sine, tri], out, rand(10, 16), "sub"); },
+  };
+  sine.frequency.value = mtof(note); tri.frequency.value = mtof(note) * 2;
+  v.tone(lv("sub", "tone")); v.wander();
+  envelope(out, CONF.sub.amp, rand(6, 12));
+  bindPitch("sub", [sine, tri]);
+  sine.start(); tri.start();
+  return v;
+}
+
+function padVoice(note) {
+  const L = layers.pad, out = ctx.createGain(), pan = ctx.createStereoPanner(), filt = ctx.createBiquadFilter();
+  const saw = ctx.createGain(), sin = ctx.createGain();
+  filt.type = "lowpass"; filt.Q.value = 1.4;
+  saw.connect(filt); sin.connect(filt); filt.connect(pan); pan.connect(out); out.connect(L.bus);
+  const oscs = [];
+  for (let i = 0; i < 3; i++) {
+    const a = ctx.createOscillator(), b = ctx.createOscillator();
+    a.type = "sawtooth"; a.connect(saw); b.connect(sin); oscs.push(a, b);
+  }
+  let toneV = 0.4, wanderK = 1;
+  const v = {
+    pitch: note,
+    retune(n) { v.pitch = n; oscs.forEach((o) => glide(o.frequency, mtof(n), 1.6)); },
+    tone(t) {
+      toneV = t;
+      glide(saw.gain, t * 0.8 * 0.33, 0.4); glide(sin.gain, (1 - t * 0.8) * 0.33, 0.4);
+      glide(filt.frequency, Math.min(16000, expmap(t, 150, 9000) * wanderK), 0.6);
+    },
+    wander() {
+      const cents = val("drift") * 60;
+      for (let i = 0; i < oscs.length; i += 2) {
+        const d = rand(-1, 1) * cents;
+        glide(oscs[i].detune, d, rand(2, 5)); glide(oscs[i + 1].detune, d, rand(2, 5));
+      }
+      wanderK = rand(0.5, 2); v.tone(toneV);
+      glide(pan.pan, rand(-0.6, 0.6), 6);
+    },
+    release() { stopLater(oscs, out, rand(8, 16), "pad"); },
+  };
+  oscs.forEach((o) => { o.frequency.value = mtof(note); });
+  v.tone(lv("pad", "tone")); v.wander();
+  envelope(out, CONF.pad.amp, rand(4, 12));
+  bindPitch("pad", oscs);
+  oscs.forEach((o) => o.start(now() + Math.random() * 0.05));
+  return v;
+}
+
+function glassVoice(note) {
+  const L = layers.glass, out = ctx.createGain(), pan = ctx.createStereoPanner();
+  const car = ctx.createOscillator(), modO = ctx.createOscillator(), modG = ctx.createGain();
+  const trem = ctx.createGain(), lfo = ctx.createOscillator(), lfoG = ctx.createGain();
+  modO.connect(modG); modG.connect(car.frequency);
+  lfo.frequency.value = rand(0.1, 0.6); lfoG.gain.value = 0.35; trem.gain.value = 0.65;
+  lfo.connect(lfoG); lfoG.connect(trem.gain);
+  car.connect(trem); trem.connect(pan); pan.connect(out); out.connect(L.bus);
+  pan.pan.value = rand(-0.8, 0.8);
+  let toneV = 0.4, idx = 1;
+  const v = {
+    pitch: note,
+    retune(n) { v.pitch = n; glide(car.frequency, mtof(n), 1); glide(modO.frequency, mtof(n) * 2.001, 1); v.tone(toneV); },
+    tone(t) { toneV = t; glide(modG.gain, mtof(v.pitch) * t * idx, 0.8); },
+    wander() { idx = rand(0.2, 2); v.tone(toneV); glide(car.detune, rand(-1, 1) * val("drift") * 18, 4); },
+    release() { stopLater([car, modO, lfo], out, rand(8, 16), "glass"); },
+  };
+  car.frequency.value = mtof(note); modO.frequency.value = mtof(note) * 2.001;
+  v.tone(lv("glass", "tone")); v.wander();
+  envelope(out, CONF.glass.amp, rand(4, 12));
+  bindPitch("glass", [car, modO]);
+  [car, modO, lfo].forEach((o) => o.start());
+  return v;
+}
+
+function sawVoice(note) {
+  const L = layers.saw, out = ctx.createGain(), merge = ctx.createChannelMerger(2), filt = ctx.createBiquadFilter();
+  filt.type = "lowpass"; filt.Q.value = 3.5;
+  const left = ctx.createOscillator(), right = ctx.createOscillator(), low = ctx.createOscillator();
+  const gl = ctx.createGain(), gr = ctx.createGain(), gd = ctx.createGain();
+  [left, right, low].forEach((o) => (o.type = "sawtooth"));
+  gl.gain.value = gr.gain.value = 0.4; gd.gain.value = 0.28;
+  left.connect(gl); gl.connect(merge, 0, 0);
+  right.connect(gr); gr.connect(merge, 0, 1);
+  low.connect(gd); gd.connect(merge, 0, 0); gd.connect(merge, 0, 1);
+  merge.connect(filt); filt.connect(out); out.connect(L.bus);
+  let toneV = 0.35, wanderK = 1;
+  const v = {
+    pitch: note,
+    retune(n) { v.pitch = n; glide(left.frequency, mtof(n), 1.2); glide(right.frequency, mtof(n), 1.2); glide(low.frequency, mtof(n) / 2, 1.2); },
+    tone(t) { toneV = t; glide(filt.frequency, Math.min(16000, expmap(t, 180, 12000) * wanderK), 0.5); },
+    wander() {
+      const d = rand(4, 8 + val("drift") * 30);
+      glide(left.detune, d, rand(2, 5)); glide(right.detune, -d, rand(2, 5));
+      wanderK = rand(0.7, 1.4); v.tone(toneV);
+    },
+    release() { stopLater([left, right, low], out, rand(6, 12), "saw"); },
+  };
+  left.frequency.value = right.frequency.value = mtof(note); low.frequency.value = mtof(note) / 2;
+  v.tone(lv("saw", "tone")); v.wander();
+  envelope(out, CONF.saw.amp, rand(3, 8));
+  bindPitch("saw", [left, right, low]);
+  [left, right, low].forEach((o) => o.start(now() + Math.random() * 0.03));
+  return v;
+}
+
+let T;                                            // texture nodes
+function buildTexture() {
+  const L = layers.texture;
+  T = { src: ctx.createBufferSource(), hp: ctx.createBiquadFilter(), lp: ctx.createBiquadFilter(), noise: ctx.createGain(), crackle: ctx.createGain(), wander: 1 };
+  T.src.buffer = whiteNoise(4); T.src.loop = true;
+  T.hp.type = "highpass"; T.hp.frequency.value = 40;
+  T.lp.type = "lowpass"; T.lp.Q.value = 0.5;
+  T.src.connect(T.hp); T.hp.connect(T.lp); T.lp.connect(T.noise); T.noise.connect(L.bus);
+  T.crackle.gain.value = 1.5; T.crackle.connect(L.bus);
+  T.click = ctx.createBuffer(1, 96, ctx.sampleRate);
+  const d = T.click.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length) ** 3;
+  T.src.start();
+}
+// Tone sets the noise filter; the level is compensated so brighter noise doesn't get much louder.
+function textureTone(tc = 0.08) {
+  const fc = Math.min(18000, expmap(lv("texture", "tone"), 300, 18000) * T.wander);
+  glide(T.lp.frequency, fc, tc);
+  glide(T.noise.gain, 1.1 * (1540 / fc) ** 0.3, tc);
+}
+function textureWander() {
+  const speed = expmap(lv("texture", "rate"), 0.3, 4);
+  T.wander = rand(0.8, 1.25);
+  textureTone(1.5 / speed);
+}
+function crackleTick() {
+  const rate = expmap(lv("texture", "density"), 0.5, 40), win = 0.1;
+  let n = 0; const L = Math.exp(-rate * win); let pr = Math.random(); while (pr > L) { n++; pr *= Math.random(); }
+  for (let i = 0; i < n; i++) {
+    const t0 = now() + 0.05 + Math.random() * win;
+    const s = ctx.createBufferSource(), ring = ctx.createBiquadFilter(), rg = ctx.createGain(), raw = ctx.createGain(), pan = ctx.createStereoPanner();
+    s.buffer = T.click; ring.type = "bandpass"; ring.Q.value = 40;
+    ring.frequency.value = mtof(state.root + 24) * pick([3, 4.5]);
+    rg.gain.value = 5 * rand(0.2, 1); raw.gain.value = lv("texture", "tone") * 0.25 * rand(0.2, 1);
+    pan.pan.value = rand(-0.9, 0.9);
+    s.connect(ring); ring.connect(rg); rg.connect(pan); s.connect(raw); raw.connect(pan); pan.connect(T.crackle);
+    s.start(t0);
+    s.onended = () => setTimeout(() => pan.disconnect(), 400);
+  }
+}
+
+// ---- parameters -> sound
+
+const TARGETS = {
+  volume: (v) => glide(A.out.gain, v * v),
+  drift: () => {},
+  drive: (v) => { A.drive.curve = tanhCurve(expmap(v, 1, 30)); },
+  crush: (v) => {
+    if (v > 0.02) A.crush.curve = crushCurve(Math.round(12 - v * 9));
+    glide(A.crushWet.gain, v > 0.02 ? 1 : 0, 0.03); glide(A.crushDry.gain, v > 0.02 ? 0 : 1, 0.03);
+  },
+  filter: (v) => glide(A.filter.frequency, expmap(v, 80, 18000), 0.05),
+  delay: (v) => glide(A.delayMix.gain, Math.max(v * 0.8, state.freeze ? 0.8 : 0), 0.1),
+  time: (v) => { const t = expmap(v, 0.05, 2); glide(A.dL.delayTime, t, 0.6); glide(A.dR.delayTime, t, 0.6); },
+  feedback: (v) => { if (!state.freeze) { glide(A.fbL.gain, v * 0.95); glide(A.fbR.gain, v * 0.95); } },
+  reverb: (v) => { glide(A.verbWet.gain, v * 1.6); glide(A.verbDry.gain, 1 - v); },
+  size: debounce((v) => { A.verb.buffer = reverbIR(1.5 + v * 6); }, 250),
+  weather: () => { for (const k of Object.keys(p)) if (k !== "weather") apply(k); },
+};
+LAYERS.forEach(({ name }) => {
+  TARGETS[`${name}_level`] = (v) => glide(layers[name].level.gain, v * v * 2, 0.1);
+  TARGETS[`${name}_space`] = (v) => { glide(layers[name].dry.gain, Math.sqrt(1 - v)); glide(layers[name].send.gain, Math.sqrt(v)); };
+  TARGETS[`${name}_tone`] = (v) => { if (name === "texture") textureTone(); else layers[name].voices.forEach((x) => x.tone && x.tone(v)); };
+  TARGETS[`${name}_pitch`] = () => glide(layers[name].pitch.offset, (lfoOff[`${name}_pitch`] || 0) * 2400, 0.015);
+  if (CONF[name] && CONF[name].maxV) TARGETS[`${name}_density`] = () => fitVoices(name);
+});
+TARGETS.texture_density = () => {};      // crackle rate is read by its own thread
+
+function apply(k) {
+  if (!A || !TARGETS[k]) return;
+  FAST = lfoKeys.has(k);
+  TARGETS[k](val(k));
+  FAST = false;
+}
+function setParam(k, v) { p[k] = Math.min(1, Math.max(0, v)); apply(k); }
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+
+// ------------------------------------------------------------------ the layer threads
+
+const MAKE = { sub: subVoice, pad: padVoice, glass: glassVoice, saw: sawVoice };
+
+function fitVoices(name) {
+  if (!A) return;
+  const c = CONF[name], voices = layers[name].voices;
+  const want = Math.round(lv(name, "density") * (c.maxV - c.minV)) + c.minV;
+  while (voices.length < want) voices.push(MAKE[name](pickNote(name)));
+  while (voices.length > want) voices.shift().release();
+}
+
+function loop(fn) {                               // each thread schedules its own next step
+  const step = () => { if (state.running) { const wait = fn(); setTimeout(step, wait * 1000); } else setTimeout(step, 500); };
+  step();
+}
+
+function startThreads() {
+  for (const name of ["sub", "pad", "glass", "saw"]) {
+    loop(() => {
+      const voices = layers[name].voices;
+      if (!state.hold) {
+        fitVoices(name);
+        if (voices.length) {
+          if (name === "glass") { voices.shift().release(); voices.push(glassVoice(pickNote("glass"))); }
+          else { const v = pick(voices); v.retune(pickNote(name)); }
+        }
+      }
+      return expmap(1 - lv(name, "rate"), 2, 40) * rand(0.6, 1.4);
+    });
+  }
+  loop(() => { textureWander(); return rand(1, 2.5); });
+  loop(() => { crackleTick(); return 0.1; });
+  loop(() => {                                    // slow per-voice wandering
+    for (const name of ["sub", "pad", "glass", "saw"]) layers[name].voices.forEach((v) => Math.random() < 0.35 && v.wander());
+    return 1.5;
+  });
+  loop(() => {                                    // weather: a random walk that drifts back to the setting
+    const keys = ["sub_tone", "pad_tone", "glass_tone", "saw_tone", "texture_tone", "pad_space", "glass_space", "filter", "time", "drift"];
+    if (p.weather > 0) for (const k of keys) {
+      const m = mod[k] || 0, dt = 0.25;
+      mod[k] = Math.max(-1, Math.min(1, m - m * 0.03 * dt + gauss() * 0.1 * Math.sqrt(dt)));
+      apply(k);
+    }
+    return 0.25;
+  });
+}
+function gauss() { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+
+// ------------------------------------------------------------------ LFOs
+
+const LFO_SHAPES = ["sine", "triangle", "saw", "square", "s&h", "drift"];
+const lfos = [
+  { target: "saw_tone", shape: "sine", phase: 0, out: 0, held: 0, from: 0, to: 0 },
+  { target: "none", shape: "triangle", phase: 0, out: 0, held: 0, from: 0, to: 0 },
+];
+const lfoKeys = new Set();
+const lfoHz = (i) => expmap(p[`lfo${i + 1}_rate`], 0.02, 20);
+function shapeAt(L, ph) {
+  switch (L.shape) {
+    case "sine": return Math.sin(2 * Math.PI * ph);
+    case "triangle": return 1 - 4 * Math.abs(ph - 0.5);
+    case "saw": return 2 * ph - 1;
+    case "square": return ph < 0.5 ? 1 : -1;
+    case "s&h": return L.held;
+    default: return L.from + (L.to - L.from) * (0.5 - 0.5 * Math.cos(Math.PI * ph));   // drift
+  }
+}
+let lfoLast = performance.now();
+function lfoTick() {
+  const t = performance.now(), dt = Math.min(0.1, (t - lfoLast) / 1000); lfoLast = t;
+  if (!state.running) return;
+  const touched = new Set(lfoKeys);
+  lfoKeys.clear();
+  for (const k of Object.keys(lfoOff)) delete lfoOff[k];
+  lfos.forEach((L, i) => {
+    L.phase += lfoHz(i) * dt;
+    while (L.phase >= 1) { L.phase -= 1; L.held = Math.random() * 2 - 1; L.from = L.to; L.to = Math.random() * 2 - 1; }
+    L.out = shapeAt(L, L.phase);
+    if (L.target === "none") return;
+    lfoOff[L.target] = (lfoOff[L.target] || 0) + L.out * p[`lfo${i + 1}_depth`] * 0.5;
+    lfoKeys.add(L.target); touched.add(L.target);
+  });
+  for (const k of touched) apply(k);       // includes destinations just switched away from, so they settle back
+}
+setInterval(lfoTick, 20);
+
+// ------------------------------------------------------------------ performance actions
+
+function mutate() {
+  if (!A) return;
+  let d = 0;
+  for (const name of ["sub", "pad", "glass", "saw"]) for (const v of [...layers[name].voices]) {
+    setTimeout(() => layers[name].voices.includes(v) && v.retune(pickNote(name)), d * 1000); d += rand(0.3, 1.2);
+  }
+  flash("mutate");
+}
+function setRoot(n) {
+  n = Math.max(24, Math.min(60, n));
+  const shift = n - state.root; state.root = n;
+  if (A) for (const name of ["sub", "pad", "glass", "saw"]) layers[name].voices.forEach((v) => v.retune(v.pitch + shift));
+  render();
+}
+function setScale(i) { state.scale = (i + SCALES.length) % SCALES.length; mutate(); render(); }
+function setHold(on) { state.hold = on; render(); }
+function setFreeze(on) {
+  state.freeze = on;
+  if (A) {
+    glide(A.delayIn.gain, on ? 0 : 1, 0.02);
+    const fb = on ? 1 : val("feedback") * 0.95;
+    glide(A.fbL.gain, fb, 0.02); glide(A.fbR.gain, fb, 0.02);
+    glide(A.lpL.frequency, on ? 12000 : 3000, 0.05); glide(A.lpR.frequency, on ? 12000 : 3000, 0.05);
+    apply("delay");
+  }
+  render();
+}
+function setMute(name, on) {
+  state.muted[name] = on;
+  if (A) glide(layers[name].mute.gain, on ? 0 : 1, 0.15);
+  render();
+}
+
+async function togglePower() {
+  if (!ctx) {
+    buildEngine();
+    state.running = true;
+    startThreads();
+  } else if (state.running) {
+    await ctx.suspend(); state.running = false;
+  } else {
+    await ctx.resume(); state.running = true;
+  }
+  if (ctx.state === "suspended" && state.running) await ctx.resume();
+  render();
+}
+
+// ------------------------------------------------------------------ UI
+
+const $ = (s, el = document) => el.querySelector(s);
+const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+const colorOf = (name) => `var(--${name})`;
+const sliders = [];
+
+function makeSlider(key, label, color, vertical, fmt) {
+  const s = el("div", `slider ${vertical ? "v" : "h"}`);
+  s.tabIndex = 0; s.setAttribute("role", "slider"); s.setAttribute("aria-label", label || key);
+  s.style.setProperty("--c", color);
+  const fill = el("div", "fill"), ghost = el("div", "ghost"), num = el("span", "num");
+  s.append(fill, ghost);
+  if (label) s.append(el("span", "lab", label));
+  s.append(num);
+  const at = (e) => {
+    const r = s.getBoundingClientRect();
+    return vertical ? 1 - (e.clientY - r.top) / r.height : (e.clientX - r.left) / r.width;
+  };
+  s.addEventListener("pointerdown", (e) => { s.setPointerCapture(e.pointerId); setParam(key, at(e)); });
+  s.addEventListener("pointermove", (e) => { if (s.hasPointerCapture(e.pointerId)) setParam(key, at(e)); });
+  s.addEventListener("keydown", (e) => {
+    const step = { ArrowUp: 0.02, ArrowRight: 0.02, ArrowDown: -0.02, ArrowLeft: -0.02 }[e.key];
+    if (step) { setParam(key, p[key] + step); e.preventDefault(); e.stopPropagation(); }
+  });
+  const obj = { key, vertical, fill, ghost, num, el: s, last: [], fmt };
+  sliders.push(obj);
+  return s;
+}
+
+function makeButton(label, color, cls = "") {
+  const b = el("button", `btn ${cls}`, label);
+  b.style.setProperty("--c", color);
+  return b;
+}
+
+function build() {
+  // PLAY
+  const keys = $("#keys");
+  NOTE_NAMES.forEach((n, i) => {
+    const k = el("button", `key${n.includes("#") ? " sharp" : ""}`, n);
+    k.dataset.pc = i; k.setAttribute("aria-label", `Root ${n}`);
+    k.addEventListener("pointerdown", () => setRoot(36 + i));
+    keys.append(k);
+  });
+  const actions = $("#actions");
+  const freeze = makeButton("Freeze<small>hold down</small>", "#78c8ff"); freeze.id = "b-freeze";
+  freeze.addEventListener("pointerdown", (e) => { freeze.setPointerCapture(e.pointerId); setFreeze(true); });
+  const release = () => state.freeze && setFreeze(false);
+  freeze.addEventListener("pointerup", release); freeze.addEventListener("pointercancel", release);
+  const hold = makeButton("Hold<small>stop changes</small>", "#b4a0ff"); hold.id = "b-hold";
+  hold.addEventListener("click", () => setHold(!state.hold));
+  const mut = makeButton("Mutate<small>new chord</small>", "var(--pad)"); mut.id = "b-mutate";
+  mut.addEventListener("click", mutate);
+  const scale = makeButton("", "var(--saw)"); scale.id = "b-scale";
+  scale.addEventListener("click", () => setScale(state.scale + 1));
+  actions.append(freeze, hold, mut, scale);
+
+  // MIX
+  const mix = $("#page-mix");
+  LAYERS.forEach(({ name }, i) => {
+    const strip = el("div", "strip");
+    const head = makeButton(name, colorOf(name), "name");
+    head.addEventListener("click", () => { state.layer = name; buildLayerPage(); goto("layer"); });
+    const body = el("div", "body");
+    const meter = el("div", "meter"); meter.style.setProperty("--c", colorOf(name)); meter.append(el("i"));
+    meter.dataset.layer = name;
+    body.append(makeSlider(`${name}_level`, "", colorOf(name), true), meter);
+    const mute = makeButton("mute", "var(--red)", "mute"); mute.dataset.mute = name;
+    mute.addEventListener("click", () => setMute(name, !state.muted[name]));
+    strip.append(head, body, mute);
+    mix.append(strip);
+  });
+
+  // FX
+  const fx = $("#page-fx");
+  FX_PARAMS.forEach((k) => fx.append(makeSlider(k, k, "var(--fx)")));
+
+  buildLayerPage();
+  buildLfoPage();
+
+  document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => goto(t.dataset.page)));
+  $("#power").addEventListener("click", togglePower);
+  $("#power2").addEventListener("click", togglePower);
+  setupXY();
+}
+
+function buildLayerPage() {
+  const chips = $("#chips"), rows = $("#layer-rows");
+  chips.innerHTML = ""; rows.innerHTML = "";
+  for (let i = sliders.length - 1; i >= 0; i--) if (!sliders[i].el.isConnected) sliders.splice(i, 1);
+  LAYERS.forEach(({ name }) => {
+    const b = makeButton(name, colorOf(name)); b.dataset.chip = name;
+    b.addEventListener("click", () => { state.layer = name; buildLayerPage(); render(); });
+    chips.append(b);
+  });
+  const mute = makeButton("mute", "var(--red)"); mute.dataset.mute = state.layer;
+  mute.addEventListener("click", () => setMute(state.layer, !state.muted[state.layer]));
+  chips.append(mute);
+  LAYER_PARAMS.forEach((k) => rows.append(makeSlider(`${state.layer}_${k}`, k, colorOf(state.layer))));
+  rows.append(el("p", "blurb", LAYERS.find((l) => l.name === state.layer).blurb));
+  for (let i = sliders.length - 1; i >= 0; i--) if (!sliders[i].el.isConnected) sliders.splice(i, 1);
+}
+
+const LFO_DEST = [
+  ...LAYERS.map(({ name }) => [name, [
+    [`${name}_level`, "level"], [`${name}_tone`, name === "texture" ? "noise filter" : "tone"],
+    ...(name === "texture" ? [["texture_density", "crackle"]] : [[`${name}_pitch`, "pitch"]]),
+    [`${name}_space`, "space"],
+  ]]),
+  ["effects", [["filter", "filter"], ["drive", "drive"], ["crush", "crush"], ["delay", "delay mix"], ["time", "delay time"], ["feedback", "feedback"], ["reverb", "reverb"], ["volume", "volume"]]],
+];
+const hzLabel = (v) => { const hz = expmap(v, 0.02, 20); return hz < 1 ? `${hz.toFixed(2)} Hz` : `${hz.toFixed(1)} Hz`; };
+
+function buildLfoPage() {
+  const page = $("#page-lfo");
+  lfos.forEach((L, i) => {
+    const n = i + 1, card = el("div", "lfo"), head = el("div", "lfo-head");
+    const sel = el("select"); sel.id = `lfo${n}-dest`; sel.setAttribute("aria-label", `LFO ${n} destination`);
+    sel.append(new Option("off", "none"));
+    for (const [group, opts] of LFO_DEST) {
+      const og = document.createElement("optgroup"); og.label = group;
+      for (const [key, label] of opts) og.append(new Option(`${group === "effects" ? "" : group + " "}${label}`, key));
+      sel.append(og);
+    }
+    sel.value = L.target;
+    sel.addEventListener("change", () => { L.target = sel.value; });
+    head.append(el("span", "lfo-name", `LFO ${n}`), sel);
+    const scope = el("canvas", "scope"); L.scope = scope;
+    const shapes = el("div", "shapes");
+    LFO_SHAPES.forEach((s) => {
+      const b = makeButton(s === "triangle" ? "tri" : s, "var(--lfo)"); b.dataset.shape = s; b.dataset.lfo = i;
+      b.addEventListener("click", () => { L.shape = s; render(); });
+      shapes.append(b);
+    });
+    card.append(head, scope, shapes,
+      makeSlider(`lfo${n}_rate`, "rate", "var(--lfo)", false, hzLabel),
+      makeSlider(`lfo${n}_depth`, "depth", "var(--lfo)"));
+    page.append(card);
+  });
+}
+
+function drawScope(L, i) {
+  const c = L.scope; if (!c || !c.isConnected || c.offsetParent === null) return;
+  const w = c.clientWidth, h = c.clientHeight, d = Math.min(2, window.devicePixelRatio || 1);
+  if (c.width !== Math.round(w * d) || c.height !== Math.round(h * d)) { c.width = Math.round(w * d); c.height = Math.round(h * d); }
+  const g = c.getContext("2d"); g.setTransform(d, 0, 0, d, 0, 0); g.clearRect(0, 0, w, h);
+  const pad = 8, mid = h / 2, amp = (h / 2 - pad) * (0.25 + 0.75 * p[`lfo${i + 1}_depth`]);
+  g.strokeStyle = "rgba(120,130,170,0.18)"; g.beginPath(); g.moveTo(0, mid); g.lineTo(w, mid); g.stroke();
+  const ghost = { shape: L.shape, held: 0.6, from: -0.5, to: 0.7 };
+  g.strokeStyle = L.target === "none" ? "rgba(130,137,163,0.5)" : "#e8e46a"; g.lineWidth = 2; g.beginPath();
+  for (let x = 0; x <= w; x += 2) {
+    const ph = x / w;
+    if (L.shape === "s&h") ghost.held = [0.6, -0.3, 0.9, -0.8][Math.min(3, Math.floor(ph * 4))];
+    const y = mid - shapeAt(ghost, L.shape === "s&h" ? ph : ph) * amp;
+    x ? g.lineTo(x, y) : g.moveTo(x, y);
+  }
+  g.stroke();
+  const px = L.phase * w, py = mid - L.out * amp;
+  g.fillStyle = "#f3f4fb"; g.beginPath(); g.arc(px, py, 4.5, 0, Math.PI * 2); g.fill();
+}
+
+let wide = false;
+function goto(page) { state.page = page; layout(); render(); }
+function layout() {
+  wide = window.matchMedia("(min-width: 1000px) and (min-height: 520px)").matches;
+  $("#app").classList.toggle("wide", wide);
+  const side = state.page === "play" ? "mix" : state.page;
+  for (const name of ["play", "mix", "layer", "fx", "lfo"]) {
+    $(`#page-${name}`).hidden = wide ? !(name === "play" || name === side) : name !== state.page;
+  }
+  document.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.page === (wide ? side : state.page))));
+  resizeXY();
+}
+
+function render() {
+  $("#st-root").textContent = noteName(state.root);
+  $("#st-scale").textContent = SCALES[state.scale][0];
+  $("#st-hold").classList.toggle("on", state.hold);
+  $("#st-freeze").classList.toggle("on", state.freeze);
+  const label = !ctx ? "Start" : state.running ? "Pause" : "Resume";
+  $("#power").textContent = label; $("#power").setAttribute("aria-pressed", String(state.running));
+  $("#cover").hidden = state.running;
+  $("#power2").textContent = ctx ? "Resume" : "Start the drone";
+  $("#b-hold").classList.toggle("lit", state.hold);
+  $("#b-freeze").classList.toggle("lit", state.freeze);
+  $("#b-scale").innerHTML = `${SCALES[state.scale][0]}<small>next scale</small>`;
+  document.querySelectorAll(".key").forEach((k) => k.classList.toggle("lit", +k.dataset.pc === state.root % 12));
+  document.querySelectorAll("[data-mute]").forEach((b) => b.classList.toggle("lit", !!state.muted[b.dataset.mute]));
+  document.querySelectorAll("[data-chip]").forEach((b) => b.classList.toggle("lit", b.dataset.chip === state.layer));
+  document.querySelectorAll("[data-shape]").forEach((b) => b.classList.toggle("lit", lfos[+b.dataset.lfo].shape === b.dataset.shape));
+}
+let flashTimer;
+function flash() { const b = $("#b-mutate"); b.classList.add("lit"); clearTimeout(flashTimer); flashTimer = setTimeout(() => b.classList.remove("lit"), 350); }
+
+// ---- XY pad + note view
+
+let cv, c2, W = 0, H = 0, dpr = 1, dragging = false;
+function setupXY() {
+  const xy = $("#xy"); cv = $("#viz"); c2 = cv.getContext("2d");
+  const set = (e) => {
+    const r = xy.getBoundingClientRect();
+    setParam("filter", (e.clientX - r.left) / r.width);
+    setParam("feedback", 1 - (e.clientY - r.top) / r.height);
+  };
+  xy.addEventListener("pointerdown", (e) => { if (e.target.closest(".cover")) return; dragging = true; xy.setPointerCapture(e.pointerId); set(e); });
+  xy.addEventListener("pointermove", (e) => { if (dragging) set(e); });
+  xy.addEventListener("pointerup", () => (dragging = false));
+  xy.addEventListener("pointercancel", () => (dragging = false));
+  new ResizeObserver(resizeXY).observe(xy);
+}
+function resizeXY() {
+  if (!cv) return;
+  const r = cv.parentElement.getBoundingClientRect();
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  W = r.width; H = r.height;
+  cv.width = Math.max(1, Math.round(W * dpr)); cv.height = Math.max(1, Math.round(H * dpr));
+}
+const RGB = { sub: [138, 124, 244], pad: [46, 196, 182], glass: [142, 202, 230], saw: [244, 162, 97], texture: [231, 111, 138] };
+function hashf(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return ((h >>> 0) % 1000) / 1000; }
+
+function drawXY(t) {
+  if (!W) return;
+  c2.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c2.clearRect(0, 0, W, H);
+  // faint pitch grid: one line per octave
+  c2.strokeStyle = "rgba(120,130,170,0.08)"; c2.lineWidth = 1;
+  for (let m = 24; m <= 96; m += 12) { const y = H * (1 - (m - 24) / 76); c2.beginPath(); c2.moveTo(0, y); c2.lineTo(W, y); c2.stroke(); }
+  c2.globalCompositeOperation = "lighter";
+  LAYERS.forEach(({ name }, i) => {
+    if (state.muted[name]) return;
+    const L = layers[name];
+    const level = L ? Math.min(1, L.rms * 4) : 0;
+    let notes = L ? L.voices.map((v) => v.pitch) : [];
+    if (name === "texture") notes = level > 0.01 ? [0, 1, 2].map((k) => 62 + 22 * Math.sin(t * 0.0003 + k * 2.1)) : [];
+    notes.forEach((pitch, n) => {
+      const seed = hashf(name + Math.round(pitch) + n);
+      const x = W * (0.07 + 0.86 * ((seed + 0.00003 * t * (1 + i * 0.25)) % 1));
+      const y = H * (1 - (pitch - 24) / 76);
+      const size = Math.min(H, 520) * (0.012 + Math.min(0.035, level * 0.08));
+      const [r, g, b] = RGB[name];
+      const grad = c2.createRadialGradient(x, y, 0, x, y, size * 2.6);
+      grad.addColorStop(0, `rgba(${r},${g},${b},0.95)`); grad.addColorStop(0.3, `rgba(${r},${g},${b},0.45)`); grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+      c2.fillStyle = grad; c2.beginPath(); c2.arc(x, y, size * 2.6, 0, Math.PI * 2); c2.fill();
+    });
+  });
+  c2.globalCompositeOperation = "source-over";
+  const x = W * p.filter, y = H * (1 - p.feedback), gx = W * val("filter"), gy = H * (1 - val("feedback"));
+  c2.strokeStyle = "rgba(150,160,200,0.28)";
+  c2.beginPath(); c2.moveTo(x, 0); c2.lineTo(x, H); c2.moveTo(0, y); c2.lineTo(W, y); c2.stroke();
+  c2.strokeStyle = "#f3f4fb"; c2.lineWidth = 2;
+  c2.beginPath(); c2.arc(x, y, Math.max(9, H / 22), 0, Math.PI * 2); c2.stroke();
+  c2.fillStyle = "#f3f4fb"; c2.beginPath(); c2.arc(gx, gy, 3, 0, Math.PI * 2); c2.fill();
+}
+
+function frame(t) {
+  if (A) for (const { name } of LAYERS) {
+    const L = layers[name]; L.meter.getFloatTimeDomainData(L.buf);
+    let s = 0; for (let i = 0; i < L.buf.length; i++) s += L.buf[i] * L.buf[i];
+    const rms = Math.sqrt(s / L.buf.length); L.rms = Math.max(rms, L.rms * 0.9);
+  }
+  for (const sl of sliders) {
+    const v = p[sl.key], live = val(sl.key);
+    if (sl.last[0] === v && sl.last[1] === live) continue;
+    sl.last = [v, live];
+    if (sl.vertical) { sl.fill.style.height = `${v * 100}%`; sl.ghost.style.bottom = `${live * 100}%`; }
+    else { sl.fill.style.width = `${v * 100}%`; sl.ghost.style.left = `${live * 100}%`; }
+    sl.num.textContent = sl.fmt ? sl.fmt(v) : Math.round(v * 100);
+    sl.el.setAttribute("aria-valuenow", Math.round(v * 100));
+  }
+  document.querySelectorAll(".meter").forEach((m) => {
+    const L = layers[m.dataset.layer]; m.firstChild.style.height = `${L ? Math.min(100, L.rms * 400) : 0}%`;
+  });
+  if (!$("#page-play").hidden) drawXY(t);
+  if (!$("#page-lfo").hidden) lfos.forEach(drawScope);
+  requestAnimationFrame(frame);
+}
+
+// keyboard
+window.addEventListener("keydown", (e) => {
+  if (e.repeat) return;
+  if (e.code === "Space") { setFreeze(true); e.preventDefault(); }
+  else if (e.key === "m" || e.key === "M") mutate();
+  else if (e.key === "h" || e.key === "H") setHold(!state.hold);
+  else if (e.key === "ArrowLeft") setRoot(state.root - 1);
+  else if (e.key === "ArrowRight") setRoot(state.root + 1);
+});
+window.addEventListener("keyup", (e) => { if (e.code === "Space") setFreeze(false); });
+window.addEventListener("resize", layout);
+
+build();
+layout();
+render();
+requestAnimationFrame(frame);
+window.__drone = { p, state, layers, val, lfos, lfoOff, get ctx() { return ctx; } };   // for testing
+</script>

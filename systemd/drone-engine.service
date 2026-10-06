@@ -1,0 +1,16 @@
+# Install: sudo cp drone-engine.service /etc/systemd/system/ && sudo systemctl enable --now drone-engine
+[Unit]
+Description=Drone machine engine
+After=network-online.target sound.target
+
+[Service]
+User=pi
+Environment=DRONE_AUDIO_DEVICE=hw:0
+ExecStart=/home/pi/drone-machine/engine/start-engine.sh
+Restart=on-failure
+RestartSec=3
+LimitRTPRIO=95
+LimitMEMLOCK=infinity
+
+[Install]
+WantedBy=multi-user.target

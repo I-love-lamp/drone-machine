@@ -1,0 +1,16 @@
+# Install: sudo cp drone-ui.service /etc/systemd/system/ && sudo systemctl enable --now drone-ui
+[Unit]
+Description=Drone machine touchscreen UI
+After=drone-engine.service
+
+[Service]
+User=pi
+SupplementaryGroups=video input render
+Environment=SDL_VIDEODRIVER=kmsdrm
+# Add --swap-xy / --flip-x / --flip-y here if touches land in the wrong place
+ExecStart=/home/pi/drone-machine/.venv/bin/python /home/pi/drone-machine/ui/ui.py
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
